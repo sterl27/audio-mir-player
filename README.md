@@ -7,10 +7,11 @@ Sidebar: Home, Explore, Analysis, Library, AI Playground, Settings.
 Analysis stage:
 
 - Drop audio
-- Essentia.js tempo / key / beats
+- Essentia.js descriptors: RhythmExtractor2013, KeyExtractor, Danceability, DynamicComplexity, Loudness / ReplayGain, SpectralCentroidTime, Energy, ZeroCrossingRate, OnsetRate, TuningFrequencyExtractor, averaged MFCC0
 - Web Audio graph: `<audio>` → MediaElementSource → AnalyserNode → destination
 - Spectrum, waveform, peak + RMS
 - Live Metrics footer splits BPM from context/FFT
+- Explore page lists each algorithm and fills live values after a run
 
 Library is session-only. Playground does not fake an LLM call.
 
