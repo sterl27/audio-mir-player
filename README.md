@@ -1,36 +1,23 @@
 # Audio MIR Player
 
-Drag-and-drop audio player with client-side music information retrieval.
+Liquid Noir analysis dashboard. Static HTML. No build.
 
-Drop a file. The browser decodes it, draws a waveform, and runs **Essentia.js** for:
+Sidebar: Home, Explore, Analysis, Library, AI Playground, Settings.
 
-- Tempo (BPM)
-- Musical key
-- Beat count
-- Duration
+Analysis stage:
 
-Playback uses a shared `AudioContext`:
+- Drop audio
+- Essentia.js tempo / key / beats
+- Web Audio graph: `<audio>` → MediaElementSource → AnalyserNode → destination
+- Spectrum, waveform, peak + RMS
+- Live Metrics footer splits BPM from context/FFT
 
-`<audio>` → `MediaElementSource` → `AnalyserNode` (fftSize 2048) → destination
-
-Live view: log-mapped spectrum bars, time-domain waveform, peak + RMS meters.
-
-Audio never leaves the device. Analysis resamples to 44.1 kHz (required by `RhythmExtractor2013`) and caps at the first 90 seconds so long tracks do not freeze the tab.
+Library is session-only. Playground does not fake an LLM call.
 
 ## Local
 
-Open `index.html` in a browser, or:
+Open `index.html` or `npx serve .`
 
-```bash
-npx serve .
-```
+## Deploy
 
-## Vercel
-
-Static site. No build step.
-
-```bash
-vercel
-```
-
-Repo: https://github.com/sterl27/audio-mir-player
+Import `sterl27/audio-mir-player` on Vercel. Framework: Other.
