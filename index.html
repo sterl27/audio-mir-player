@@ -29,7 +29,7 @@
     .sub { color: var(--muted); font-size: 0.85rem; margin-bottom: 32px; text-align: center; }
     #dropzone {
       width: 100%;
-      max-width: 640px;
+      max-width: 720px;
       border: 2px dashed var(--line);
       border-radius: 16px;
       padding: 60px 20px;
@@ -45,16 +45,80 @@
     #dropzone .icon { font-size: 2.5rem; margin-bottom: 12px; }
     #dropzone p { color: #9a9aad; font-size: 0.95rem; }
     #dropzone .hint { color: #5a5a6e; font-size: 0.75rem; margin-top: 8px; }
-    #player { display: none; width: 100%; max-width: 640px; margin-top: 24px; }
+    #player { display: none; width: 100%; max-width: 720px; margin-top: 24px; }
     #player.visible { display: block; }
     .file-name { font-size: 0.9rem; color: #b8b8c8; margin-bottom: 12px; word-break: break-all; }
-    audio { width: 100%; margin-bottom: 16px; }
+    audio { width: 100%; margin-bottom: 12px; }
+    .viz-toolbar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+    .viz-toolbar button {
+      background: #1a1a24;
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 0.75rem;
+      cursor: pointer;
+    }
+    .viz-toolbar button.active {
+      border-color: var(--accent);
+      color: var(--accent-2);
+      background: #1c1830;
+    }
+    .viz-stack { display: grid; gap: 8px; }
     canvas {
       width: 100%;
-      height: 120px;
       border-radius: 8px;
       background: #0a0a10;
       display: block;
+    }
+    #spectrum { height: 160px; }
+    #waveform { height: 88px; }
+    .meters {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .meter {
+      background: var(--panel);
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+    .meter .row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.7rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+    }
+    .meter .val { color: var(--accent-2); font-variant-numeric: tabular-nums; }
+    .bar-track {
+      height: 8px;
+      background: #0a0a10;
+      border-radius: 99px;
+      overflow: hidden;
+      position: relative;
+    }
+    .bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #6c5ce7, #a29bfe);
+      border-radius: 99px;
+    }
+    .bar-peak {
+      position: absolute;
+      top: 0;
+      width: 2px;
+      height: 100%;
+      background: #fff;
+      left: 0;
     }
     .features {
       display: grid;
@@ -97,19 +161,37 @@
 </head>
 <body>
   <h1>Audio MIR Player</h1>
-  <p class="sub">Drop an audio file. Tempo, key, and beats stay in the browser.</p>
+  <p class="sub">Drop an audio file. Tempo, key, beats + live Web Audio analyser.</p>
 
   <div id="dropzone">
     <div class="icon">🎵</div>
-    <p>Drag &amp; drop audio here, or click to browse</p>
-    <p class="hint">WAV, MP3, FLAC, OGG, M4A · analyzed at 44.1 kHz</p>
+    <p>Drag & drop audio here, or click to browse</p>
+    <p class="hint">WAV, MP3, FLAC, OGG, M4A · analysed at 44.1 kHz</p>
     <input type="file" id="fileInput" accept="audio/*" hidden />
   </div>
 
   <div id="player">
     <div class="file-name" id="fileName"></div>
     <audio id="audio" controls></audio>
-    <canvas id="waveform"></canvas>
+    <div class="viz-toolbar">
+      <button type="button" data-mode="both" class="active">Spectrum + wave</button>
+      <button type="button" data-mode="spectrum">Spectrum</button>
+      <button type="button" data-mode="wave">Waveform</button>
+    </div>
+    <div class="viz-stack">
+      <canvas id="spectrum"></canvas>
+      <canvas id="waveform"></canvas>
+    </div>
+    <div class="meters">
+      <div class="meter">
+        <div class="row"><span>Peak</span><span class="val" id="peakVal">-∞ dB</span></div>
+        <div class="bar-track"><div class="bar-fill" id="peakFill"></div><div class="bar-peak" id="peakHold"></div></div>
+      </div>
+      <div class="meter">
+        <div class="row"><span>RMS</span><span class="val" id="rmsVal">-∞ dB</span></div>
+        <div class="bar-track"><div class="bar-fill" id="rmsFill"></div></div>
+      </div>
+    </div>
     <div class="features">
       <div class="feature"><div class="label">Tempo</div><div class="value" id="tempo">—</div></div>
       <div class="feature"><div class="label">Key</div><div class="value" id="key">—</div></div>
@@ -129,15 +211,26 @@
     const fileInput = document.getElementById("fileInput");
     const player = document.getElementById("player");
     const audioEl = document.getElementById("audio");
-    const canvas = document.getElementById("waveform");
-    const ctx = canvas.getContext("2d");
+    const specCanvas = document.getElementById("spectrum");
+    const waveCanvas = document.getElementById("waveform");
+    const specCtx = specCanvas.getContext("2d");
+    const waveCtx = waveCanvas.getContext("2d");
     const statusEl = document.getElementById("status");
+    const peakVal = document.getElementById("peakVal");
+    const rmsVal = document.getElementById("rmsVal");
+    const peakFill = document.getElementById("peakFill");
+    const rmsFill = document.getElementById("rmsFill");
+    const peakHoldEl = document.getElementById("peakHold");
 
     let essentia = null;
     let audioContext = null;
-    let analyser = null;
     let sourceNode = null;
+    let analyser = null;
     let animationId = null;
+    let vizMode = "both";
+    let peakHold = 0;
+    let freqData = null;
+    let timeData = null;
 
     function setStatus(html) {
       statusEl.innerHTML = html;
@@ -156,6 +249,27 @@
       setStatus("");
     }
 
+    function ensureGraph() {
+      if (!audioContext) {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (!sourceNode) {
+        sourceNode = audioContext.createMediaElementSource(audioEl);
+      }
+      if (!analyser) {
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 2048;
+        analyser.smoothingTimeConstant = 0.82;
+        analyser.minDecibels = -90;
+        analyser.maxDecibels = -10;
+        freqData = new Uint8Array(analyser.frequencyBinCount);
+        timeData = new Uint8Array(analyser.fftSize);
+        sourceNode.connect(analyser);
+        analyser.connect(audioContext.destination);
+      }
+      return audioContext.resume();
+    }
+
     dropzone.addEventListener("click", () => fileInput.click());
     dropzone.addEventListener("dragover", (e) => {
       e.preventDefault();
@@ -169,6 +283,20 @@
     });
     fileInput.addEventListener("change", () => {
       if (fileInput.files.length) handleFile(fileInput.files[0]);
+    });
+
+    document.querySelectorAll(".viz-toolbar button").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        vizMode = btn.dataset.mode;
+        document.querySelectorAll(".viz-toolbar button").forEach((b) => b.classList.toggle("active", b === btn));
+        specCanvas.style.display = vizMode === "wave" ? "none" : "block";
+        waveCanvas.style.display = vizMode === "spectrum" ? "none" : "block";
+        sizeCanvases();
+      });
+    });
+
+    audioEl.addEventListener("play", () => {
+      ensureGraph().then(startViz);
     });
 
     async function resampleMono(decoded) {
@@ -206,14 +334,11 @@
       const arrayBuf = await file.arrayBuffer();
       audioEl.src = URL.createObjectURL(file);
 
-      if (!audioContext) {
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      }
-      if (audioContext.state === "suspended") await audioContext.resume();
-
+      await ensureGraph();
       const decoded = await audioContext.decodeAudioData(arrayBuf.slice(0));
       document.getElementById("duration").textContent = formatTime(decoded.duration);
-      drawWaveform(decoded.getChannelData(0));
+      sizeCanvases();
+      drawStaticWave(decoded.getChannelData(0));
 
       setStatus('<span class="spinner"></span>Analyzing...');
       try {
@@ -224,14 +349,14 @@
         document.getElementById("beats").textContent = String(results.beats);
         setStatus(
           decoded.duration > MAX_ANALYZE_SECONDS
-            ? "Analysis complete (first 90 seconds)"
-            : "Analysis complete"
+            ? "Analysis complete (first 90 seconds) · press play for live analyser"
+            : "Analysis complete · press play for live analyser"
         );
       } catch (err) {
         setStatus("Analysis failed: " + err.message);
       }
 
-      hookLiveViz();
+      startViz();
     }
 
     function vectorSize(vec) {
@@ -256,13 +381,21 @@
       return { tempo: bpm, key: key.trim(), beats };
     }
 
-    function drawWaveform(data) {
-      const w = (canvas.width = canvas.offsetWidth * devicePixelRatio);
-      const h = (canvas.height = canvas.offsetHeight * devicePixelRatio);
-      ctx.clearRect(0, 0, w, h);
-      ctx.strokeStyle = varAccent();
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
+    function sizeCanvases() {
+      [specCanvas, waveCanvas].forEach((c) => {
+        c.width = Math.max(1, Math.floor(c.offsetWidth * devicePixelRatio));
+        c.height = Math.max(1, Math.floor(c.offsetHeight * devicePixelRatio));
+      });
+    }
+    window.addEventListener("resize", sizeCanvases);
+
+    function drawStaticWave(data) {
+      const w = waveCanvas.width;
+      const h = waveCanvas.height;
+      waveCtx.clearRect(0, 0, w, h);
+      waveCtx.strokeStyle = "#6c5ce7";
+      waveCtx.lineWidth = 1.5;
+      waveCtx.beginPath();
       const step = Math.max(1, Math.ceil(data.length / w));
       for (let i = 0; i < w; i++) {
         let min = 1;
@@ -273,61 +406,89 @@
           if (v < min) min = v;
           if (v > max) max = v;
         }
-        ctx.moveTo(i, ((1 + min) * h) / 2);
-        ctx.lineTo(i, ((1 + max) * h) / 2);
+        waveCtx.moveTo(i, ((1 + min) * h) / 2);
+        waveCtx.lineTo(i, ((1 + max) * h) / 2);
       }
-      ctx.stroke();
+      waveCtx.stroke();
     }
 
-    function varAccent() {
-      return getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#6c5ce7";
-    }
-
-    function hookLiveViz() {
-      if (sourceNode) {
-        try { sourceNode.disconnect(); } catch (_) {}
-        sourceNode = null;
-      }
-      try {
-        sourceNode = audioContext.createMediaElementSource(audioEl);
-      } catch (_) {}
-      if (!analyser) {
-        analyser = audioContext.createAnalyser();
-        analyser.fftSize = 2048;
-      }
-      if (sourceNode) {
-        sourceNode.connect(analyser);
-        analyser.connect(audioContext.destination);
-      }
-      startLiveViz();
-    }
-
-    function startLiveViz() {
+    function startViz() {
       if (animationId) cancelAnimationFrame(animationId);
-      if (!analyser) return;
-      const bufferLength = analyser.frequencyBinCount;
-      const dataArray = new Uint8Array(bufferLength);
-      function draw() {
-        animationId = requestAnimationFrame(draw);
-        analyser.getByteTimeDomainData(dataArray);
-        const w = canvas.width;
-        const h = canvas.height;
-        ctx.fillStyle = "rgba(10,10,16,0.25)";
-        ctx.fillRect(0, 0, w, h);
-        ctx.strokeStyle = "#a29bfe";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        const slice = w / bufferLength;
-        let x = 0;
-        for (let i = 0; i < bufferLength; i++) {
-          const y = (dataArray[i] / 128) * h / 2;
-          if (i === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-          x += slice;
-        }
-        ctx.stroke();
+      function frame() {
+        animationId = requestAnimationFrame(frame);
+        if (!analyser) return;
+        analyser.getByteFrequencyData(freqData);
+        analyser.getByteTimeDomainData(timeData);
+        if (vizMode !== "wave") drawSpectrum();
+        if (vizMode !== "spectrum") drawLiveWave();
+        updateMeters();
       }
-      draw();
+      frame();
+    }
+
+    function drawSpectrum() {
+      const w = specCanvas.width;
+      const h = specCanvas.height;
+      specCtx.fillStyle = "#0a0a10";
+      specCtx.fillRect(0, 0, w, h);
+
+      const bins = freqData.length;
+      const barCount = 96;
+      const gap = Math.max(1, Math.floor(w / barCount * 0.18));
+      const barW = Math.max(1, (w - gap * barCount) / barCount);
+
+      for (let i = 0; i < barCount; i++) {
+        const t0 = i / barCount;
+        const t1 = (i + 1) / barCount;
+        const i0 = Math.floor(Math.pow(t0, 2.1) * (bins - 1));
+        const i1 = Math.max(i0 + 1, Math.floor(Math.pow(t1, 2.1) * (bins - 1)));
+        let sum = 0;
+        for (let k = i0; k < i1; k++) sum += freqData[k];
+        const mag = sum / (i1 - i0) / 255;
+        const barH = mag * h;
+        const x = i * (barW + gap);
+        const hue = 250 + mag * 40;
+        specCtx.fillStyle = "hsl(" + hue + " 80% " + (48 + mag * 22) + "%)";
+        specCtx.fillRect(x, h - barH, barW, barH);
+      }
+    }
+
+    function drawLiveWave() {
+      const w = waveCanvas.width;
+      const h = waveCanvas.height;
+      waveCtx.fillStyle = "rgba(10,10,16,0.35)";
+      waveCtx.fillRect(0, 0, w, h);
+      waveCtx.strokeStyle = "#a29bfe";
+      waveCtx.lineWidth = 2 * devicePixelRatio;
+      waveCtx.beginPath();
+      const n = timeData.length;
+      for (let i = 0; i < n; i++) {
+        const x = (i / (n - 1)) * w;
+        const y = (timeData[i] / 255) * h;
+        if (i === 0) waveCtx.moveTo(x, y);
+        else waveCtx.lineTo(x, y);
+      }
+      waveCtx.stroke();
+    }
+
+    function updateMeters() {
+      let peak = 0;
+      let sumSq = 0;
+      for (let i = 0; i < timeData.length; i++) {
+        const a = (timeData[i] - 128) / 128;
+        const abs = Math.abs(a);
+        if (abs > peak) peak = abs;
+        sumSq += a * a;
+      }
+      const rms = Math.sqrt(sumSq / timeData.length);
+      const peakDb = 20 * Math.log10(Math.max(1e-6, peak));
+      const rmsDb = 20 * Math.log10(Math.max(1e-6, rms));
+      peakHold = Math.max(peak * 0.995, peakHold * 0.96, peak);
+      peakVal.textContent = peakDb.toFixed(1) + " dB";
+      rmsVal.textContent = rmsDb.toFixed(1) + " dB";
+      peakFill.style.width = Math.min(100, peak * 100) + "%";
+      rmsFill.style.width = Math.min(100, rms * 1.6 * 100) + "%";
+      peakHoldEl.style.left = Math.min(99, peakHold * 100) + "%";
     }
 
     function formatTime(s) {
