@@ -158,6 +158,33 @@
       grid-template-columns: repeat(2, 1fr);
       gap: 8px;
     }
+    .metrics.wide { grid-template-columns: repeat(2, 1fr); }
+    .explore-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .explore-grid article h3 { color: var(--cyan); font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
+    .algo {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px;
+      color: #9aa6b5;
+      margin: 4px 0;
+    }
+    .algo b { color: var(--text); font-weight: 600; }
+    .algo .live { color: var(--cyan); }
+    .tag {
+      display: inline-block;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      border: 1px solid var(--line);
+      border-radius: 99px;
+      padding: 2px 7px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
     .metric {
       background: rgba(0,0,0,0.28);
       border: 1px solid var(--line);
@@ -263,10 +290,56 @@
 
       <section class="view" id="view-explore">
         <h2 class="display">EXPLORE</h2>
-        <div class="explore-list" style="margin-top:14px">
-          <article><h3>RhythmExtractor2013</h3><p class="empty">Tempo + tick locations at 44.1 kHz. First 90 seconds.</p></article>
-          <article><h3>KeyExtractor</h3><p class="empty">Pitch-class key and scale from the same mono buffer.</p></article>
-          <article><h3>AnalyserNode</h3><p class="empty">fftSize 2048 spectrum + time domain + peak/RMS meters.</p></article>
+        <p class="empty" style="margin-top:8px">Essentia.js 0.1.3 algorithms used on the dropped buffer. Values fill after Analysis runs. Frame algos are averaged over ~40 windows.</p>
+        <div class="explore-grid">
+          <article>
+            <div class="tag">Rhythm</div>
+            <h3>RhythmExtractor2013</h3>
+            <p class="algo">bpm <b class="live" data-k="bpm">—</b></p>
+            <p class="algo">ticks <b class="live" data-k="beats">—</b></p>
+            <p class="algo">confidence <b class="live" data-k="confidence">—</b></p>
+            <p class="empty">Requires 44.1 kHz. Method default is multifeature.</p>
+          </article>
+          <article>
+            <div class="tag">Tonal</div>
+            <h3>KeyExtractor</h3>
+            <p class="algo">key <b class="live" data-k="key">—</b></p>
+            <p class="algo">strength <b class="live" data-k="keyStrength">—</b></p>
+            <p class="empty">HPCP frames → Key profile. Not a chord tracker.</p>
+          </article>
+          <article>
+            <div class="tag">Tonal</div>
+            <h3>TuningFrequencyExtractor</h3>
+            <p class="algo">Hz <b class="live" data-k="tuning">—</b></p>
+            <p class="empty">Estimated reference pitch, usually near 440.</p>
+          </article>
+          <article>
+            <div class="tag">Rhythm</div>
+            <h3>Danceability</h3>
+            <p class="algo">score <b class="live" data-k="dance">—</b></p>
+            <p class="empty">DFA over time scales. Typical range ~0–3.</p>
+          </article>
+          <article>
+            <div class="tag">Dynamics</div>
+            <h3>DynamicComplexity + Loudness</h3>
+            <p class="algo">complexity <b class="live" data-k="dyn">—</b></p>
+            <p class="algo">loudness <b class="live" data-k="loud">—</b></p>
+            <p class="algo">replayGain <b class="live" data-k="rg">—</b></p>
+          </article>
+          <article>
+            <div class="tag">Spectral</div>
+            <h3>Time + frame averages</h3>
+            <p class="algo">centroid <b class="live" data-k="centroid">—</b></p>
+            <p class="algo">zcr <b class="live" data-k="zcr">—</b></p>
+            <p class="algo">energy <b class="live" data-k="energy">—</b></p>
+            <p class="algo">onsetRate <b class="live" data-k="onsets">—</b></p>
+            <p class="algo">mfcc0 <b class="live" data-k="mfcc0">—</b></p>
+          </article>
+          <article>
+            <div class="tag">Not in this pass</div>
+            <h3>Heavier / model algos</h3>
+            <p class="empty">PitchMelodia, TonalExtractor chords, LoudnessEBUR128 stereo, TensorFlow MusiCNN/VGGish. Those need longer buffers or extra WASM modules.</p>
+          </article>
         </div>
       </section>
 
@@ -292,11 +365,19 @@
           </div>
           <div class="card">
             <h3>Descriptors</h3>
-            <div class="metrics">
+            <div class="metrics wide">
               <div class="metric"><div class="k">Tempo</div><div class="v" id="tempo">—</div></div>
               <div class="metric"><div class="k">Key</div><div class="v" id="key">—</div></div>
               <div class="metric"><div class="k">Beats</div><div class="v" id="beats">—</div></div>
               <div class="metric"><div class="k">Duration</div><div class="v" id="duration">—</div></div>
+              <div class="metric"><div class="k">Dance</div><div class="v" id="dance">—</div></div>
+              <div class="metric"><div class="k">DynCx</div><div class="v" id="dyn">—</div></div>
+              <div class="metric"><div class="k">Loudness</div><div class="v" id="loud">—</div></div>
+              <div class="metric"><div class="k">Centroid</div><div class="v" id="centroid">—</div></div>
+              <div class="metric"><div class="k">Tuning</div><div class="v" id="tuning">—</div></div>
+              <div class="metric"><div class="k">OnsetRate</div><div class="v" id="onsets">—</div></div>
+              <div class="metric"><div class="k">ZCR</div><div class="v" id="zcr">—</div></div>
+              <div class="metric"><div class="k">MFCC0</div><div class="v" id="mfcc0">—</div></div>
             </div>
             <div class="meter-row">
               <div class="lab"><span>Peak</span><span id="peakVal">-∞ dB</span></div>
@@ -468,7 +549,7 @@
       try { await initEssentia(); } catch (err) { setStatus(err.message); return; }
 
       document.getElementById("fileName").textContent = file.name;
-      setDesc("—", "—", "—", "—");
+      paintDescriptors({ duration: formatTime(0) });
       audioEl.src = URL.createObjectURL(file);
 
       await ensureGraph();
@@ -477,14 +558,15 @@
       sizeCanvases();
       drawStaticWave(decoded.getChannelData(0));
 
-      setStatus('<span class="spinner"></span>Analyzing...');
+      setStatus('<span class="spinner"></span>Extracting Essentia descriptors...');
       try {
-        const results = runMIR(await resampleMono(decoded));
-        setDesc(results.tempo.toFixed(1) + " BPM", results.key, String(results.beats), formatTime(decoded.duration));
-        document.getElementById("footBpm").textContent = results.tempo.toFixed(1);
-        document.getElementById("footKey").textContent = results.key;
-        setStatus(decoded.duration > MAX_ANALYZE_SECONDS ? "First 90 seconds analyzed. Press play." : "Analysis complete. Press play.");
-        library.unshift({ name: file.name, tempo: results.tempo, key: results.key, beats: results.beats, duration: decoded.duration });
+        const results = runDescriptors(await resampleMono(decoded));
+        results.durationStr = formatTime(decoded.duration);
+        paintDescriptors(results);
+        document.getElementById("footBpm").textContent = fmtNum(results.tempo, 1);
+        document.getElementById("footKey").textContent = results.key || "—";
+        setStatus(decoded.duration > MAX_ANALYZE_SECONDS ? "First 90 seconds. Press play." : "Descriptors ready. Press play.");
+        library.unshift({ name: file.name, ...results, duration: decoded.duration });
         renderLibrary();
       } catch (err) {
         setStatus("Analysis failed: " + err.message);
@@ -492,11 +574,50 @@
       startViz();
     }
 
-    function setDesc(tempo, key, beats, duration) {
-      document.getElementById("tempo").textContent = tempo;
-      document.getElementById("key").textContent = key;
-      document.getElementById("beats").textContent = beats;
-      document.getElementById("duration").textContent = duration;
+    function fmtNum(v, digits) {
+      return typeof v === "number" && isFinite(v) ? v.toFixed(digits) : "—";
+    }
+
+    function paintDescriptors(r) {
+      const tempo = r.tempo != null ? fmtNum(r.tempo, 1) + " BPM" : "—";
+      const map = {
+        tempo: tempo,
+        key: r.key || "—",
+        beats: r.beats != null ? String(r.beats) : "—",
+        duration: r.durationStr || "—",
+        dance: fmtNum(r.dance, 2),
+        dyn: fmtNum(r.dyn, 2),
+        loud: fmtNum(r.loud, 2),
+        centroid: r.centroid != null ? Math.round(r.centroid) + " Hz" : "—",
+        tuning: r.tuning != null ? fmtNum(r.tuning, 1) + " Hz" : "—",
+        onsets: fmtNum(r.onsets, 2),
+        zcr: fmtNum(r.zcr, 3),
+        mfcc0: fmtNum(r.mfcc0, 2)
+      };
+      Object.entries(map).forEach(([id, val]) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = val;
+      });
+      const exploreMap = {
+        bpm: fmtNum(r.tempo, 1),
+        beats: r.beats != null ? String(r.beats) : "—",
+        confidence: fmtNum(r.confidence, 2),
+        key: r.key || "—",
+        keyStrength: fmtNum(r.keyStrength, 2),
+        tuning: r.tuning != null ? fmtNum(r.tuning, 1) : "—",
+        dance: fmtNum(r.dance, 2),
+        dyn: fmtNum(r.dyn, 2),
+        loud: fmtNum(r.loud, 2),
+        rg: fmtNum(r.rg, 2),
+        centroid: r.centroid != null ? Math.round(r.centroid) + " Hz" : "—",
+        zcr: fmtNum(r.zcr, 3),
+        energy: fmtNum(r.energy, 3),
+        onsets: fmtNum(r.onsets, 2),
+        mfcc0: fmtNum(r.mfcc0, 2)
+      };
+      document.querySelectorAll(".live[data-k]").forEach((el) => {
+        el.textContent = exploreMap[el.dataset.k] || "—";
+      });
     }
 
     function renderLibrary() {
@@ -504,15 +625,21 @@
         libraryList.innerHTML = '<p class="empty">Session library is empty. Analyze a file first.</p>';
         return;
       }
-      libraryList.innerHTML = library.map((item, i) => (
+      libraryList.innerHTML = library.map((item) => (
         '<div class="lib-item"><strong>' + escapeHtml(item.name) + '</strong><div class="empty">' +
-        item.tempo.toFixed(1) + ' BPM · ' + escapeHtml(item.key) + ' · ' + item.beats + ' beats · ' +
-        formatTime(item.duration) + '</div></div>'
+        fmtNum(item.tempo, 1) + ' BPM · ' + escapeHtml(item.key || "—") + ' · dance ' + fmtNum(item.dance, 2) +
+        ' · ' + formatTime(item.duration) + '</div></div>'
       )).join("");
     }
 
     function escapeHtml(s) {
-      return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&", "<": "<", ">": ">", '"': """, "'": "&#39;" }[c]));
+      return String(s).replace(/[&<>"']/g, (c) => ({
+        "&": "&",
+        "<": "<",
+        ">": ">",
+        '"': """,
+        "'": "&#39;"
+      }[c]));
     }
 
     function vectorSize(vec) {
@@ -522,15 +649,88 @@
       try { return essentia.vectorToArray(vec).length; } catch { return 0; }
     }
 
-    function runMIR(channelData) {
+    function toNum(v) {
+      return typeof v === "number" && isFinite(v) ? v : null;
+    }
+
+    function safe(fn) {
+      try { return fn(); } catch { return null; }
+    }
+
+    function runDescriptors(channelData) {
       const signal = essentia.arrayToVector(channelData);
-      const rhythm = essentia.RhythmExtractor2013(signal);
-      const keyRes = essentia.KeyExtractor(signal);
-      return {
-        tempo: typeof rhythm.bpm === "number" ? rhythm.bpm : 0,
-        key: ((keyRes.key || "?") + " " + (keyRes.scale || "")).trim(),
-        beats: vectorSize(rhythm.ticks)
-      };
+      const out = {};
+
+      const rhythm = safe(() => essentia.RhythmExtractor2013(signal));
+      if (rhythm) {
+        out.tempo = toNum(rhythm.bpm);
+        out.beats = vectorSize(rhythm.ticks);
+        out.confidence = toNum(rhythm.confidence);
+      }
+
+      const keyRes = safe(() => essentia.KeyExtractor(signal));
+      if (keyRes) {
+        out.key = ((keyRes.key || "?") + " " + (keyRes.scale || "")).trim();
+        out.keyStrength = toNum(keyRes.strength);
+      }
+
+      const dance = safe(() => essentia.Danceability(signal));
+      if (dance) out.dance = toNum(dance.danceability);
+
+      const dyn = safe(() => essentia.DynamicComplexity(signal));
+      if (dyn) {
+        out.dyn = toNum(dyn.dynamicComplexity);
+        out.loud = toNum(dyn.loudness);
+      }
+      if (out.loud == null) {
+        const loud = safe(() => essentia.Loudness(signal));
+        if (loud) out.loud = toNum(loud.loudness);
+      }
+
+      const rg = safe(() => essentia.ReplayGain(signal));
+      if (rg) out.rg = toNum(rg.replayGain);
+
+      const cent = safe(() => essentia.SpectralCentroidTime(signal, TARGET_SR));
+      if (cent) out.centroid = toNum(cent.centroid);
+
+      const energy = safe(() => essentia.Energy(signal));
+      if (energy) out.energy = toNum(energy.energy);
+
+      const zcr = safe(() => essentia.ZeroCrossingRate(signal));
+      if (zcr) out.zcr = toNum(zcr.zeroCrossingRate);
+
+      const onsets = safe(() => essentia.OnsetRate(signal));
+      if (onsets) out.onsets = toNum(onsets.onsetRate);
+
+      const tune = safe(() => essentia.TuningFrequencyExtractor(signal));
+      if (tune) out.tuning = toNum(tune.tuningFrequency);
+
+      out.mfcc0 = meanMfcc0(channelData);
+      return out;
+    }
+
+    function meanMfcc0(channelData) {
+      try {
+        const frameSize = 2048;
+        const hop = Math.max(frameSize, Math.floor(channelData.length / 40));
+        let sum = 0;
+        let n = 0;
+        for (let start = 0; start + frameSize < channelData.length; start += hop) {
+          const frame = channelData.subarray(start, start + frameSize);
+          const vec = essentia.arrayToVector(frame);
+          const windowed = essentia.Windowing(vec);
+          const spec = essentia.Spectrum(windowed.frame || windowed);
+          const mfcc = essentia.MFCC(spec.spectrum || spec);
+          const coeffs = mfcc.mfcc ? essentia.vectorToArray(mfcc.mfcc) : null;
+          if (coeffs && coeffs.length) {
+            sum += coeffs[0];
+            n += 1;
+          }
+        }
+        return n ? sum / n : null;
+      } catch {
+        return null;
+      }
     }
 
     function sizeCanvases() {
