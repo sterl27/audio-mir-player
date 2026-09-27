@@ -44,8 +44,9 @@ export default function Home() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d);
-    const w = canvas.width = canvas.offsetWidth * devicePixelRatio;
-    const h = canvas.height = canvas.offsetHeight * devicePixelRatio;
+    const dpr = typeof devicePixelRatio !== "undefined" ? devicePixelRatio : 1;
+    const w = canvas.width = canvas.offsetWidth * dpr;
+    const h = canvas.height = canvas.offsetHeight * dpr;
     ctx.clearRect(0, 0, w, h);
     ctx.strokeStyle = '#6c5ce7';
     ctx.lineWidth = 1.5;
