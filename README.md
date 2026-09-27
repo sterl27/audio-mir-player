@@ -1,21 +1,30 @@
 # Audio MIR Player
 
-Drag-and-drop audio player with client-side music information retrieval (tempo, key, beats) powered by Essentia.js.
+Drag-and-drop audio player with client-side music information retrieval.
 
-## Deploy to Vercel
+Drop a file. The browser decodes it, draws a waveform, and runs **Essentia.js** for:
+
+- Tempo (BPM)
+- Musical key
+- Beat count
+- Duration
+
+Audio never leaves the device. Analysis resamples to 44.1 kHz (required by `RhythmExtractor2013`) and caps at the first 90 seconds so long tracks do not freeze the tab.
+
+## Local
+
+Open `index.html` in a browser, or:
 
 ```bash
-npm install
+npx serve .
+```
+
+## Vercel
+
+Static site. No build step.
+
+```bash
 vercel
 ```
 
-Or push to GitHub and import the repo in the Vercel dashboard.
-
-## Local dev
-
-```bash
-npm install
-npm run dev
-```
-
-Open http://localhost:3000
+Repo: https://github.com/sterl27/audio-mir-player

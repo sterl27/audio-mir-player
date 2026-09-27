@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Audio MIR Player</title>
+  <style>
+    :root {
+      --bg: #0d0d12;
+      --panel: #14141c;
+      --line: #2a2a38;
+      --muted: #7a7a8c;
+      --text: #e8e8ed;
+      --accent: #6c5ce7;
+      --accent-2: #a29bfe;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px;
+    }
+    h1 { font-size: 1.4rem; font-weight: 600; margin-bottom: 8px; letter-spacing: -0.02em; }
+    .sub { color: var(--muted); font-size: 0.85rem; margin-bottom: 32px; text-align: center; }
+    #dropzone {
+      width: 100%;
+      max-width: 640px;
+      border: 2px dashed var(--line);
+      border-radius: 16px;
+      padding: 60px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      background: var(--panel);
+    }
+    #dropzone:hover, #dropzone.dragover {
+      border-color: var(--accent);
+      background: #1a1a26;
+    }
+    #dropzone .icon { font-size: 2.5rem; margin-bottom: 12px; }
+    #dropzone p { color: #9a9aad; font-size: 0.95rem; }
+    #dropzone .hint { color: #5a5a6e; font-size: 0.75rem; margin-top: 8px; }
+    #player { display: none; width: 100%; max-width: 640px; margin-top: 24px; }
+    #player.visible { display: block; }
+    .file-name { font-size: 0.9rem; color: #b8b8c8; margin-bottom: 12px; word-break: break-all; }
+    audio { width: 100%; margin-bottom: 16px; }
+    canvas {
+      width: 100%;
+      height: 120px;
+      border-radius: 8px;
+      background: #0a0a10;
+      display: block;
+    }
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .feature {
+      background: var(--panel);
+      border-radius: 10px;
+      padding: 14px;
+      text-align: center;
+    }
+    .feature .label {
+      font-size: 0.7rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .feature .value {
+      font-size: 1.3rem;
+      font-weight: 600;
+      margin-top: 4px;
+      color: var(--accent);
+    }
+    .status { color: var(--muted); font-size: 0.8rem; margin-top: 12px; min-height: 1.2em; }
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid var(--line);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <h1>Audio MIR Player</h1>
+  <p class="sub">Drop an audio file. Tempo, key, and beats stay in the browser.</p>
+
+  <div id="dropzone">
+    <div class="icon">🎵</div>
+    <p>Drag &amp; drop audio here, or click to browse</p>
+    <p class="hint">WAV, MP3, FLAC, OGG, M4A · analyzed at 44.1 kHz</p>
+    <input type="file" id="fileInput" accept="audio/*" hidden />
+  </div>
+
+  <div id="player">
+    <div class="file-name" id="fileName"></div>
+    <audio id="audio" controls></audio>
+    <canvas id="waveform"></canvas>
+    <div class="features">
+      <div class="feature"><div class="label">Tempo</div><div class="value" id="tempo">—</div></div>
+      <div class="feature"><div class="label">Key</div><div class="value" id="key">—</div></div>
+      <div class="feature"><div class="label">Beats</div><div class="value" id="beats">—</div></div>
+      <div class="feature"><div class="label">Duration</div><div class="value" id="duration">—</div></div>
+    </div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/essentia.js@0.1.3/dist/essentia-wasm.umd.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/essentia.js@0.1.3/dist/essentia.js-core.umd.js"></script>
+  <script>
+    const TARGET_SR = 44100;
+    const MAX_ANALYZE_SECONDS = 90;
+
+    const dropzone = document.getElementById("dropzone");
+    const fileInput = document.getElementById("fileInput");
+    const player = document.getElementById("player");
+    const audioEl = document.getElementById("audio");
+    const canvas = document.getElementById("waveform");
+    const ctx = canvas.getContext("2d");
+    const statusEl = document.getElementById("status");
+
+    let essentia = null;
+    let audioContext = null;
+    let analyser = null;
+    let sourceNode = null;
+    let animationId = null;
+
+    function setStatus(html) {
+      statusEl.innerHTML = html;
+    }
+
+    async function initEssentia() {
+      if (essentia) return;
+      setStatus('<span class="spinner"></span>Loading MIR engine...');
+      const wasmFactory = window.EssentiaWASM;
+      const Essentia = window.Essentia;
+      if (!wasmFactory || !Essentia) {
+        throw new Error("Essentia.js failed to load from CDN");
+      }
+      const wasm = await wasmFactory();
+      essentia = new Essentia(wasm);
+      setStatus("");
+    }
+
+    dropzone.addEventListener("click", () => fileInput.click());
+    dropzone.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      dropzone.classList.add("dragover");
+    });
+    dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
+    dropzone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      dropzone.classList.remove("dragover");
+      if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener("change", () => {
+      if (fileInput.files.length) handleFile(fileInput.files[0]);
+    });
+
+    async function resampleMono(decoded) {
+      const duration = Math.min(decoded.duration, MAX_ANALYZE_SECONDS);
+      const frames = Math.ceil(duration * TARGET_SR);
+      const offline = new OfflineAudioContext(1, frames, TARGET_SR);
+      const src = offline.createBufferSource();
+      src.buffer = decoded;
+      src.connect(offline.destination);
+      src.start(0);
+      const rendered = await offline.startRendering();
+      return rendered.getChannelData(0);
+    }
+
+    async function handleFile(file) {
+      if (!file || (!file.type.startsWith("audio") && !/\.(wav|mp3|flac|ogg|m4a|aac)$/i.test(file.name))) {
+        setStatus("Drop an audio file.");
+        return;
+      }
+
+      try {
+        await initEssentia();
+      } catch (err) {
+        setStatus(err.message);
+        return;
+      }
+
+      document.getElementById("fileName").textContent = file.name;
+      document.getElementById("tempo").textContent = "—";
+      document.getElementById("key").textContent = "—";
+      document.getElementById("beats").textContent = "—";
+      document.getElementById("duration").textContent = "—";
+      player.classList.add("visible");
+
+      const arrayBuf = await file.arrayBuffer();
+      audioEl.src = URL.createObjectURL(file);
+
+      if (!audioContext) {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioContext.state === "suspended") await audioContext.resume();
+
+      const decoded = await audioContext.decodeAudioData(arrayBuf.slice(0));
+      document.getElementById("duration").textContent = formatTime(decoded.duration);
+      drawWaveform(decoded.getChannelData(0));
+
+      setStatus('<span class="spinner"></span>Analyzing...');
+      try {
+        const mono44k = await resampleMono(decoded);
+        const results = runMIR(mono44k);
+        document.getElementById("tempo").textContent = results.tempo.toFixed(1) + " BPM";
+        document.getElementById("key").textContent = results.key;
+        document.getElementById("beats").textContent = String(results.beats);
+        setStatus(
+          decoded.duration > MAX_ANALYZE_SECONDS
+            ? "Analysis complete (first 90 seconds)"
+            : "Analysis complete"
+        );
+      } catch (err) {
+        setStatus("Analysis failed: " + err.message);
+      }
+
+      hookLiveViz();
+    }
+
+    function vectorSize(vec) {
+      if (!vec) return 0;
+      if (typeof vec.size === "function") return vec.size();
+      if (Array.isArray(vec)) return vec.length;
+      if (typeof vec.length === "number") return vec.length;
+      try {
+        return essentia.vectorToArray(vec).length;
+      } catch {
+        return 0;
+      }
+    }
+
+    function runMIR(channelData) {
+      const signal = essentia.arrayToVector(channelData);
+      const rhythm = essentia.RhythmExtractor2013(signal);
+      const keyRes = essentia.KeyExtractor(signal);
+      const bpm = typeof rhythm.bpm === "number" ? rhythm.bpm : 0;
+      const beats = vectorSize(rhythm.ticks);
+      const key = (keyRes.key || "?") + " " + (keyRes.scale || "");
+      return { tempo: bpm, key: key.trim(), beats };
+    }
+
+    function drawWaveform(data) {
+      const w = (canvas.width = canvas.offsetWidth * devicePixelRatio);
+      const h = (canvas.height = canvas.offsetHeight * devicePixelRatio);
+      ctx.clearRect(0, 0, w, h);
+      ctx.strokeStyle = varAccent();
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      const step = Math.max(1, Math.ceil(data.length / w));
+      for (let i = 0; i < w; i++) {
+        let min = 1;
+        let max = -1;
+        const start = i * step;
+        for (let j = 0; j < step && start + j < data.length; j++) {
+          const v = data[start + j];
+          if (v < min) min = v;
+          if (v > max) max = v;
+        }
+        ctx.moveTo(i, ((1 + min) * h) / 2);
+        ctx.lineTo(i, ((1 + max) * h) / 2);
+      }
+      ctx.stroke();
+    }
+
+    function varAccent() {
+      return getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#6c5ce7";
+    }
+
+    function hookLiveViz() {
+      if (sourceNode) {
+        try { sourceNode.disconnect(); } catch (_) {}
+        sourceNode = null;
+      }
+      try {
+        sourceNode = audioContext.createMediaElementSource(audioEl);
+      } catch (_) {}
+      if (!analyser) {
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 2048;
+      }
+      if (sourceNode) {
+        sourceNode.connect(analyser);
+        analyser.connect(audioContext.destination);
+      }
+      startLiveViz();
+    }
+
+    function startLiveViz() {
+      if (animationId) cancelAnimationFrame(animationId);
+      if (!analyser) return;
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+      function draw() {
+        animationId = requestAnimationFrame(draw);
+        analyser.getByteTimeDomainData(dataArray);
+        const w = canvas.width;
+        const h = canvas.height;
+        ctx.fillStyle = "rgba(10,10,16,0.25)";
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = "#a29bfe";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        const slice = w / bufferLength;
+        let x = 0;
+        for (let i = 0; i < bufferLength; i++) {
+          const y = (dataArray[i] / 128) * h / 2;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+          x += slice;
+        }
+        ctx.stroke();
+      }
+      draw();
+    }
+
+    function formatTime(s) {
+      const m = Math.floor(s / 60);
+      const sec = Math.floor(s % 60);
+      return m + ":" + String(sec).padStart(2, "0");
+    }
+  </script>
+</body>
+</html>
