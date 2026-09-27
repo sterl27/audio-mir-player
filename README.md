@@ -9,6 +9,12 @@ Drop a file. The browser decodes it, draws a waveform, and runs **Essentia.js** 
 - Beat count
 - Duration
 
+Playback uses a shared `AudioContext`:
+
+`<audio>` → `MediaElementSource` → `AnalyserNode` (fftSize 2048) → destination
+
+Live view: log-mapped spectrum bars, time-domain waveform, peak + RMS meters.
+
 Audio never leaves the device. Analysis resamples to 44.1 kHz (required by `RhythmExtractor2013`) and caps at the first 90 seconds so long tracks do not freeze the tab.
 
 ## Local
